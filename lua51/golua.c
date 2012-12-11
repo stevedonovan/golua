@@ -1,11 +1,8 @@
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
-#include "_cgo_export.h"
-//metatables to register:
-//	GoLua.GoInterface
-//  GoLua.GoFunction
-//
+
+typedef struct  { void *t; void *v; } *GoInterface;
 
 static const char GoStateRegistryKey = 'k'; //golua registry key
 static const char PanicFIDRegistryKey = 'k';
@@ -18,22 +15,21 @@ unsigned int* clua_checkgofunction(lua_State* L, int index)
 	return fid;
 }
 
-GoInterface* clua_getgostate(lua_State* L)
+void* clua_getgostate(lua_State* L)
 {
 	//get gostate from registry entry
 	lua_pushlightuserdata(L,(void*)&GoStateRegistryKey);
 	lua_gettable(L, LUA_REGISTRYINDEX);
-	GoInterface* gip = lua_touserdata(L,-1);
+	GoInterface gip = lua_touserdata(L,-1);
 	lua_pop(L,1);
 	return gip;	
 }
-
 
 //wrapper for callgofunction
 int callback_function(lua_State* L)
 {
 	unsigned int *fid = clua_checkgofunction(L,1);
-	GoInterface* gi = clua_getgostate(L);
+	GoInterface gi = clua_getgostate(L);
 	//remove the go function from the stack (to present same behavior as lua_CFunctions)
 	lua_remove(L,1);
 	return golua_callgofunction(*gi,*fid);
@@ -43,7 +39,7 @@ int callback_function(lua_State* L)
 int gchook_wrapper(lua_State* L) 
 {
 	unsigned int* fid = clua_checkgofunction(L,-1); //TODO: this will error
-	GoInterface* gi = clua_getgostate(L);
+	GoInterface gi = clua_getgostate(L);
 	if(fid != NULL)
 		return golua_gchook(*gi,*fid);
 
@@ -65,6 +61,18 @@ void clua_pushgofunction(lua_State* L, unsigned int fid)
 	lua_setmetatable(L, -2);
 }
 
+static int callback_c (lua_State* L)
+{
+    int fid = clua_togofunction(L,lua_upvalueindex(1));
+    GoInterface gi = clua_getgostate(L);
+    return golua_callgofunction(*gi,fid);
+}
+
+void clua_pushcallback(lua_State* L)
+{    
+    lua_pushcclosure(L,callback_c,1);
+}
+
 void clua_pushlightinteger(lua_State* L, unsigned int n)
 {
   lua_pushlightuserdata(L, (void*)n);
@@ -75,24 +83,24 @@ int clua_tolightinteger(lua_State *L, unsigned int index)
   return (int)lua_touserdata(L, index);
 }
 
-void clua_setgostate(lua_State* L, GoInterface gi)
+void clua_setgostate(lua_State* L, void *gi)
 {
 	lua_pushlightuserdata(L,(void*)&GoStateRegistryKey);
-	GoInterface* gip = (GoInterface*)lua_newuserdata(L,sizeof(GoInterface));
+	GoInterface gip = (GoInterface)lua_newuserdata(L,sizeof(GoInterface));
+    GoInterface ggi = (GoInterface)gi;
 	//copy interface value to userdata
-	gip->v = gi.v;
-	gip->t = gi.t;
+	gip->v = ggi->v;
+	gip->t = ggi->t;
 	//set into registry table
 	lua_settable(L,LUA_REGISTRYINDEX);
-	
 }
 
-
-void clua_pushgointerface(lua_State* L, GoInterface gi)
+void clua_pushgointerface(lua_State* L, void* gi)
 {
-	GoInterface* iptr = (GoInterface*)lua_newuserdata(L, sizeof(GoInterface));
-	iptr->v = gi.v;
-	iptr->t = gi.t;
+	GoInterface iptr = (GoInterface)lua_newuserdata(L, sizeof(GoInterface));
+    GoInterface ggi = gi;
+	iptr->v = ggi->v;
+	iptr->t = ggi->t;
 	luaL_getmetatable(L, "GoLua.GoInterface");
 	lua_setmetatable(L,-2);
 }
@@ -122,13 +130,13 @@ int callback_panicf(lua_State* L)
 	lua_gettable(L,LUA_REGISTRYINDEX);
 	unsigned int fid = lua_tointeger(L,-1);
 	lua_pop(L,1);
-	GoInterface* gi = clua_getgostate(L);
+	GoInterface gi = clua_getgostate(L);
 	return golua_callpanicfunction(*gi,fid);
 
 }
 
 //TODO: currently setting garbage when panicf set to null
-GoInterface clua_atpanic(lua_State* L, unsigned int panicf_id)
+void* clua_atpanic(lua_State* L, unsigned int panicf_id)
 {
 	//get old panicfid
 	unsigned int old_id;
@@ -150,12 +158,12 @@ GoInterface clua_atpanic(lua_State* L, unsigned int panicf_id)
 	//make a GoInterface with a wrapped C panicf or the original go panicf
 	if(pf == &callback_panicf)
 	{
-		return golua_idtointerface(old_id);
+		return (void*)golua_idtointerface(old_id);
 	}
 	else
 	{
 		//TODO: technically UB, function ptr -> non function ptr
-		return golua_cfunctiontointerface((int*)pf);
+		return (void*)golua_cfunctiontointerface((int*)pf);
 	}
 }
 
@@ -163,6 +171,8 @@ int clua_callluacfunc(lua_State* L, lua_CFunction f)
 {
 	return f(L);
 }
+
+typedef void *uintptr;
 
 void* allocwrapper(void* ud, void *ptr, size_t osize, size_t nsize)
 {

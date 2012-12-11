@@ -1,15 +1,13 @@
 package lua51
-
+//#cgo CFLAGS: -Ilua
+//#cgo linux LDFLAGS: -llua5.1
+//#cgo darwin LDFLAGS: -llua
 //#include <lua.h>
 //#include "golua.h"
 import "C"
 
 import "unsafe"
-//TODO: remove
-import "fmt"
-
-
-
+//import "fmt"
 
 //like lua_Writer, but as p will contain capacity, not needed as separate param
 type Writer func(L *State, p []byte, ud interface{});
@@ -18,7 +16,6 @@ type Writer func(L *State, p []byte, ud interface{});
 type Reader func(L *State, data interface{}) []byte;
 
 //wrapper to keep cgo from complaining about incomplete ptr type
-//export State
 type State struct {
 	s *C.lua_State;
 	//funcs []GoFunction;
@@ -32,8 +29,8 @@ func newState(L *C.lua_State) *State {
 	newstate := &State{L, make([]interface{},0,8), make([]uint,0,8)};
 	newstatei = newstate;
 	ns1 := unsafe.Pointer(&newstatei);
-	ns2 := (*C.GoInterface)(ns1);
-	C.clua_setgostate(L,*ns2); //hacky....
+	//ns2 := (C.GoInterface)(ns1);
+	C.clua_setgostate(L,ns1); //hacky....
 	C.clua_initstate(L)
 	return newstate;
 }
@@ -101,24 +98,24 @@ func golua_callgofunction(L interface{}, fid uint) int {
 func golua_gchook(L interface{}, id uint) int {
 	L1 := L.(*State);
 	L1.unregister(id);
-	fmt.Printf("GC id: %d\n",id);
+	//fmt.Printf("GC id: %d\n",id);
 	return 0;
 }
 
 //export golua_callpanicfunction
-func callpanicfunction(L interface{}, id uint) int {
+func golua_callpanicfunction(L interface{}, id uint) int {
 	L1 := L.(*State);
 	f := L1.registry[id].(GoFunction);
 	return f(L1);
 }
 
 //export golua_idtointerface
-func idtointerface(id uint) interface{} {
+func golua_idtointerface(id uint) interface{} {
 	return id;
 }
 
 //export golua_cfunctiontointerface
-func cfunctiontointerface(f *uintptr) interface{} {
+func golua_cfunctiontointerface(f *uintptr) interface{} {
 	return f;
 }
 
@@ -128,6 +125,10 @@ func (L *State) PushGoFunction(f GoFunction) {
 	C.clua_pushgofunction(L.s,C.uint(fid));
 }
 
+func (L *State) PushGoCallback(f GoFunction) {
+    L.PushGoFunction(f)  // leaves Go function userdata on stack
+    C.clua_pushcallback(L.s)
+}
 
 func (L *State) PushLightInteger(n int) {
 	C.clua_pushlightinteger(L.s, C.int(n))
@@ -157,7 +158,7 @@ func (L *State) NewUserdata(size uintptr) unsafe.Pointer {
 
 type Alloc func(ptr unsafe.Pointer, osize uint, nsize uint) unsafe.Pointer;
 //export golua_callallocf
-func callAllocf(fp uintptr,	ptr uintptr,
+func golua_callallocf(fp uintptr,	ptr uintptr,
 			    osize uint,			nsize uint) uintptr {
 	return uintptr((*((*Alloc)(unsafe.Pointer(fp))))(unsafe.Pointer(ptr),osize,nsize));
 }

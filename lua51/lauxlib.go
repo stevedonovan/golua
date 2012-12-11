@@ -1,6 +1,6 @@
 package lua51
-
-//#include <lua.h>
+//#cgo CFLAGS: -Ilua
+//#include <lua.h>  
 //#include <lauxlib.h>
 //#include <lualib.h>
 //#include "golua.h"
