@@ -109,14 +109,17 @@ func golua_callpanicfunction(L interface{}, id uint) int {
 	return f(L1);
 }
 
+
 //export golua_idtointerface
-func golua_idtointerface(id uint) interface{} {
-	return id;
+func golua_idtointerface(id uint) unsafe.Pointer {
+    var iid interface{} = id;
+	return unsafe.Pointer(&iid)
 }
 
 //export golua_cfunctiontointerface
-func golua_cfunctiontointerface(f *uintptr) interface{} {
-	return f;
+func golua_cfunctiontointerface(f *uintptr) unsafe.Pointer {  // wuz interface{}
+    var iif interface{} = f;
+	return unsafe.Pointer(&iif)
 }
 
 
