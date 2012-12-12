@@ -1,7 +1,7 @@
 package lua51
 //#cgo CFLAGS: -Ilua
 //#cgo llua LDFLAGS: -llua
-//#cgo linux LDFLAGS: -llua5.1
+//#cgo linux,!llua LDFLAGS: -llua5.1
 //#cgo darwin LDFLAGS: -llua
 //#cgo freebsd LDFLAGS: -llua
 //#include <lua.h>
